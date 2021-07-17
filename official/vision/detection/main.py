@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Main function to train various object detection models."""
 
 import functools
@@ -40,7 +40,9 @@ flags_core.define_log_steps()
 flags.DEFINE_bool('enable_xla', default=False, help='Enable XLA for GPU')
 
 flags.DEFINE_string(
-    'mode', default='train', help='Mode to run: `train` or `eval`.')
+    'mode',
+    default='train',
+    help='Mode to run: `train`, `eval` or `eval_once`.')
 
 flags.DEFINE_string(
     'model', default='retinanet',
@@ -68,9 +70,7 @@ def run_executor(params,
   """Runs the object detection model on distribution strategy defined by the user."""
 
   if params.architecture.use_bfloat16:
-    policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
-        'mixed_bfloat16')
-    tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
+    tf.compat.v2.keras.mixed_precision.set_global_policy('mixed_bfloat16')
 
   model_builder = model_factory.model_generator(params)
 

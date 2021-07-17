@@ -139,7 +139,8 @@ class TfExampleDecoder(data_decoder.DataDecoder):
                load_context_features=False,
                expand_hierarchy_labels=False,
                load_dense_pose=False,
-               load_track_id=False):
+               load_track_id=False,
+               load_keypoint_depth_features=False):
     """Constructor sets keys_to_features and items_to_handlers.
 
     Args:
@@ -172,6 +173,10 @@ class TfExampleDecoder(data_decoder.DataDecoder):
         the labels are expanded to descendants.
       load_dense_pose: Whether to load DensePose annotations.
       load_track_id: Whether to load tracking annotations.
+      load_keypoint_depth_features: Whether to load the keypoint depth features
+        including keypoint relative depths and weights. If this field is set to
+        True but no keypoint depth features are in the input tf.Example, then
+        default values will be populated.
 
     Raises:
       ValueError: If `instance_mask_type` option is not one of
@@ -180,6 +185,7 @@ class TfExampleDecoder(data_decoder.DataDecoder):
       ValueError: If `expand_labels_hierarchy` is True, but the
         `label_map_proto_file` is not provided.
     """
+
     # TODO(rathodv): delete unused `use_display_name` argument once we change
     # other decoders to handle label maps similarly.
     del use_display_name
@@ -331,6 +337,23 @@ class TfExampleDecoder(data_decoder.DataDecoder):
           slim_example_decoder.ItemHandlerCallback(
               ['image/object/keypoint/x', 'image/object/keypoint/visibility'],
               self._reshape_keypoint_visibilities))
+      if load_keypoint_depth_features:
+        self.keys_to_features['image/object/keypoint/z'] = (
+            tf.VarLenFeature(tf.float32))
+        self.keys_to_features['image/object/keypoint/z/weights'] = (
+            tf.VarLenFeature(tf.float32))
+        self.items_to_handlers[
+            fields.InputDataFields.groundtruth_keypoint_depths] = (
+                slim_example_decoder.ItemHandlerCallback(
+                    ['image/object/keypoint/x', 'image/object/keypoint/z'],
+                    self._reshape_keypoint_depths))
+        self.items_to_handlers[
+            fields.InputDataFields.groundtruth_keypoint_depth_weights] = (
+                slim_example_decoder.ItemHandlerCallback(
+                    ['image/object/keypoint/x',
+                     'image/object/keypoint/z/weights'],
+                    self._reshape_keypoint_depth_weights))
+
     if load_instance_masks:
       if instance_mask_type in (input_reader_pb2.DEFAULT,
                                 input_reader_pb2.NUMERICAL_MASKS):
@@ -350,6 +373,11 @@ class TfExampleDecoder(data_decoder.DataDecoder):
                     self._decode_png_instance_masks))
       else:
         raise ValueError('Did not recognize the `instance_mask_type` option.')
+      self.keys_to_features['image/object/mask/weight'] = (
+          tf.VarLenFeature(tf.float32))
+      self.items_to_handlers[
+          fields.InputDataFields.groundtruth_instance_mask_weights] = (
+              slim_example_decoder.Tensor('image/object/mask/weight'))
     if load_dense_pose:
       self.keys_to_features['image/object/densepose/num'] = (
           tf.VarLenFeature(tf.int64))
@@ -468,6 +496,10 @@ class TfExampleDecoder(data_decoder.DataDecoder):
         tensor of shape [None, num_keypoints] containing keypoint visibilites.
       fields.InputDataFields.groundtruth_instance_masks - 3D float32 tensor of
         shape [None, None, None] containing instance masks.
+      fields.InputDataFields.groundtruth_instance_mask_weights - 1D float32
+        tensor of shape [None] containing weights. These are typically values
+        in {0.0, 1.0} which indicate whether to consider the mask related to an
+        object.
       fields.InputDataFields.groundtruth_image_classes - 1D int64 of shape
         [None] containing classes for the boxes.
       fields.InputDataFields.multiclass_scores - 1D float32 tensor of shape
@@ -507,6 +539,21 @@ class TfExampleDecoder(data_decoder.DataDecoder):
                 tensor_dict[fields.InputDataFields.groundtruth_weights])[0],
             0), lambda: tensor_dict[fields.InputDataFields.groundtruth_weights],
         default_groundtruth_weights)
+
+    if fields.InputDataFields.groundtruth_instance_masks in tensor_dict:
+      gt_instance_masks = tensor_dict[
+          fields.InputDataFields.groundtruth_instance_masks]
+      num_gt_instance_masks = tf.shape(gt_instance_masks)[0]
+      gt_instance_mask_weights = tensor_dict[
+          fields.InputDataFields.groundtruth_instance_mask_weights]
+      num_gt_instance_mask_weights = tf.shape(gt_instance_mask_weights)[0]
+      def default_groundtruth_instance_mask_weights():
+        return tf.ones([num_gt_instance_masks], dtype=tf.float32)
+
+      tensor_dict[fields.InputDataFields.groundtruth_instance_mask_weights] = (
+          tf.cond(tf.greater(num_gt_instance_mask_weights, 0),
+                  lambda: gt_instance_mask_weights,
+                  default_groundtruth_instance_mask_weights))
 
     if fields.InputDataFields.groundtruth_keypoints in tensor_dict:
       # Set all keypoints that are not labeled to NaN.
@@ -600,6 +647,73 @@ class TfExampleDecoder(data_decoder.DataDecoder):
     keypoints = tf.concat([y, x], 1)
     keypoints = tf.reshape(keypoints, [-1, self._num_keypoints, 2])
     return keypoints
+
+  def _reshape_keypoint_depths(self, keys_to_tensors):
+    """Reshape keypoint depths.
+
+    The keypoint depths are reshaped to [num_instances, num_keypoints]. The
+    keypoint depth tensor is expected to have the same shape as the keypoint x
+    (or y) tensors. If not (usually because the example does not have the depth
+    groundtruth), then default depth values (zero) are provided.
+
+    Args:
+      keys_to_tensors: a dictionary from keys to tensors. Expected keys are:
+        'image/object/keypoint/x'
+        'image/object/keypoint/z'
+
+    Returns:
+      A 2-D float tensor of shape [num_instances, num_keypoints] with values
+        representing the keypoint depths.
+    """
+    x = keys_to_tensors['image/object/keypoint/x']
+    z = keys_to_tensors['image/object/keypoint/z']
+    if isinstance(z, tf.SparseTensor):
+      z = tf.sparse_tensor_to_dense(z)
+    if isinstance(x, tf.SparseTensor):
+      x = tf.sparse_tensor_to_dense(x)
+
+    default_z = tf.zeros_like(x)
+    # Use keypoint depth groundtruth if provided, otherwise use the default
+    # depth value.
+    z = tf.cond(tf.equal(tf.size(x), tf.size(z)),
+                true_fn=lambda: z,
+                false_fn=lambda: default_z)
+    z = tf.reshape(z, [-1, self._num_keypoints])
+    return z
+
+  def _reshape_keypoint_depth_weights(self, keys_to_tensors):
+    """Reshape keypoint depth weights.
+
+    The keypoint depth weights are reshaped to [num_instances, num_keypoints].
+    The keypoint depth weights tensor is expected to have the same shape as the
+    keypoint x (or y) tensors. If not (usually because the example does not have
+    the depth weights groundtruth), then default weight values (zero) are
+    provided.
+
+    Args:
+      keys_to_tensors: a dictionary from keys to tensors. Expected keys are:
+        'image/object/keypoint/x'
+        'image/object/keypoint/z/weights'
+
+    Returns:
+      A 2-D float tensor of shape [num_instances, num_keypoints] with values
+        representing the keypoint depth weights.
+    """
+    x = keys_to_tensors['image/object/keypoint/x']
+    z = keys_to_tensors['image/object/keypoint/z/weights']
+    if isinstance(z, tf.SparseTensor):
+      z = tf.sparse_tensor_to_dense(z)
+    if isinstance(x, tf.SparseTensor):
+      x = tf.sparse_tensor_to_dense(x)
+
+    default_z = tf.zeros_like(x)
+    # Use keypoint depth weights if provided, otherwise use the default
+    # values.
+    z = tf.cond(tf.equal(tf.size(x), tf.size(z)),
+                true_fn=lambda: z,
+                false_fn=lambda: default_z)
+    z = tf.reshape(z, [-1, self._num_keypoints])
+    return z
 
   def _reshape_keypoint_visibilities(self, keys_to_tensors):
     """Reshape keypoint visibilities.

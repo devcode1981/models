@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Transformer-based text encoder network."""
 # pylint: disable=g-classes-have-attributes
 import collections
@@ -41,7 +41,7 @@ class BertEncoder(keras_nlp.encoders.BertEncoder):
   *Note* that the network is constructed by
   [Keras Functional API](https://keras.io/guides/functional_api/).
 
-  Arguments:
+  Args:
     vocab_size: The size of the token vocabulary.
     hidden_size: The size of the transformer hidden layers.
     num_layers: The number of transformer layers.
@@ -65,18 +65,21 @@ class BertEncoder(keras_nlp.encoders.BertEncoder):
       keyed by `encoder_outputs`.
     output_range: The sequence output range, [0, output_range), by slicing the
       target sequence of the last transformer layer. `None` means the entire
-      target sequence will attend to the source sequence, which yeilds the full
+      target sequence will attend to the source sequence, which yields the full
       output.
     embedding_width: The width of the word embeddings. If the embedding width is
       not equal to hidden size, embedding parameters will be factorized into two
-      matrices in the shape of ['vocab_size', 'embedding_width'] and
-      ['embedding_width', 'hidden_size'] ('embedding_width' is usually much
-      smaller than 'hidden_size').
+      matrices in the shape of `(vocab_size, embedding_width)` and
+      `(embedding_width, hidden_size)`, where `embedding_width` is usually much
+      smaller than `hidden_size`.
     embedding_layer: The word embedding layer. `None` means we will create a new
       embedding layer. Otherwise, we will reuse the given embedding layer. This
       parameter is originally added for ELECTRA model which needs to tie the
       generator embeddings with the discriminator embeddings.
     dict_outputs: Whether to use a dictionary as the model outputs.
+    norm_first: Whether to normalize inputs to attention and intermediate
+      dense layers. If set False, output of attention and intermediate dense
+      layers is normalized.
   """
 
   def __init__(self,
@@ -97,6 +100,7 @@ class BertEncoder(keras_nlp.encoders.BertEncoder):
                embedding_width=None,
                embedding_layer=None,
                dict_outputs=False,
+               norm_first=False,
                **kwargs):
 
     # b/164516224
@@ -120,7 +124,8 @@ class BertEncoder(keras_nlp.encoders.BertEncoder):
         initializer=initializer,
         output_range=output_range,
         embedding_width=embedding_width,
-        embedding_layer=embedding_layer)
+        embedding_layer=embedding_layer,
+        norm_first=norm_first)
 
     self._embedding_layer_instance = embedding_layer
 

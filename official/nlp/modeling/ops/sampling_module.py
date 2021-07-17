@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Sampling module for top_k, top_p and greedy decoding."""
 
 import abc
@@ -25,7 +25,7 @@ from official.nlp.modeling.ops import decoding_module
 
 def greedy(log_probs):
   """Returns the top ids and scores based on greedy decoding."""
-  log_probs, ids = tf.nn.top_k(log_probs, k=1)
+  log_probs, ids = tf.math.top_k(log_probs, k=1)
   return log_probs, ids
 
 
@@ -56,9 +56,9 @@ def sample_top_k(logits, top_k):
     Logits with top_k filtering applied.
   """
   top_k_logits = tf.math.top_k(logits, k=top_k)
-  indices_to_remove = logits < top_k_logits[0][..., -1, None]
-  top_k_logits = set_tensor_by_indices_to_value(
-      logits, indices_to_remove, np.NINF)
+  indices_to_remove = logits < tf.expand_dims(top_k_logits[0][..., -1], -1)
+  top_k_logits = set_tensor_by_indices_to_value(logits, indices_to_remove,
+                                                np.NINF)
   return top_k_logits
 
 
@@ -76,14 +76,15 @@ def sample_top_p(logits, top_p):
   """
   sorted_indices = tf.argsort(logits, direction="DESCENDING")
   # Flatten logits as tf.gather on TPU needs axis to be compile time constant.
-  range_for_gather = tf.expand_dims(tf.range(0, logits.shape[0]), axis=1)
-  range_for_gather = tf.tile(range_for_gather * logits.shape[1],
-                             [1, logits.shape[1]]) + sorted_indices
+  logits_shape = decoding_module.shape_list(logits)
+  range_for_gather = tf.expand_dims(tf.range(0, logits_shape[0]), axis=1)
+  range_for_gather = tf.tile(range_for_gather * logits_shape[1],
+                             [1, logits_shape[1]]) + sorted_indices
   flattened_logits = tf.reshape(logits, [-1])
   flattened_sorted_indices = tf.reshape(range_for_gather, [-1])
   sorted_logits = tf.reshape(
       tf.gather(flattened_logits, flattened_sorted_indices),
-      [logits.shape[0], logits.shape[1]])
+      [logits_shape[0], logits_shape[1]])
   cumulative_probs = tf.cumsum(tf.nn.softmax(sorted_logits, axis=-1), axis=-1)
 
   # Remove tokens with cumulative probability above the threshold.
@@ -145,7 +146,7 @@ def set_tensor_by_indices_to_value(input_tensor, indices, value):
 
 
 class SamplingModule(decoding_module.DecodingModule, metaclass=abc.ABCMeta):
-  """Implementation for sampling stratgies (go/decoding-tf-nlp)."""
+  """Implementation for sampling strategies (go/decoding-tf-nlp)."""
 
   def __init__(self,
                symbols_to_logits_fn,
@@ -166,8 +167,7 @@ class SamplingModule(decoding_module.DecodingModule, metaclass=abc.ABCMeta):
     self.padded_decode = padded_decode
     self.dtype = tf.as_dtype(dtype)
     self.vocab_size = tf.convert_to_tensor(vocab_size, dtype=tf.int32)
-    self.max_decode_length = tf.convert_to_tensor(max_decode_length,
-                                                  dtype=tf.int32)
+    self.max_decode_length = max_decode_length
     self.top_k = tf.convert_to_tensor(top_k, dtype=tf.int32)
     self.top_p = tf.convert_to_tensor(top_p, dtype=tf.float32)
     self.sample_temperature = tf.convert_to_tensor(sample_temperature,
@@ -250,7 +250,7 @@ class SamplingModule(decoding_module.DecodingModule, metaclass=abc.ABCMeta):
         if inner_value.dtype != self.dtype:
           raise TypeError(
               "initial_cache element for key '%s' has dtype %s that does not "
-              "match SequenceBeamSearch's dtype of %s. Value: %s" %
+              "match sampling_module's dtype of %s. Value: %s" %
               (key, value.dtype.name, self.dtype.name, inner_value))
 
     # Current loop index (starts at 0)
@@ -425,23 +425,23 @@ class SamplingModule(decoding_module.DecodingModule, metaclass=abc.ABCMeta):
         finished_cond, finished_seq)
     score_cond = decoding_module.expand_to_same_rank(
         finished_cond, finished_scores)
-    finished_seq = tf.where(seq_cond, finished_seq, alive_seq, finished_scores)
+    finished_seq = tf.where(seq_cond, finished_seq, alive_seq)
     finished_scores = tf.where(score_cond, finished_scores, alive_log_probs)
     return finished_seq, finished_scores
 
   def _continue_search(self, state) -> tf.Tensor:
     i = state[decoding_module.StateKeys.CUR_INDEX]
-    return tf.less(i, self.max_decode_length)
+    # Have we reached max decoding length?
+    not_at_end = tf.less(i, self.max_decode_length)
+    # Have all sampled sequences reached an EOS?
+    all_has_eos = tf.reduce_all(
+        state[decoding_module.StateKeys.FINISHED_FLAGS],
+        axis=None,
+        name="search_finish_cond")
+    return tf.logical_and(not_at_end, tf.logical_not(all_has_eos))
 
   def _finished_flags(self, topk_ids, state) -> tf.Tensor:
     new_finished_flags = tf.equal(topk_ids, self.eos_id)
     new_finished_flags = tf.logical_or(
         new_finished_flags, state[decoding_module.StateKeys.FINISHED_FLAGS])
     return new_finished_flags
-
-
-
-
-
-
-

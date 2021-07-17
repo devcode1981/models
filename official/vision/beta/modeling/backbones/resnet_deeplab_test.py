@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
+# Lint as: python3
 """Tests for resnet_deeplab models."""
 
 # Import libraries
@@ -40,6 +40,36 @@ class ResNetTest(parameterized.TestCase, tf.test.TestCase):
 
     network = resnet_deeplab.DilatedResNet(model_id=model_id,
                                            output_stride=output_stride)
+    inputs = tf.keras.Input(shape=(input_size, input_size, 3), batch_size=1)
+    endpoints = network(inputs)
+    print(endpoints)
+    self.assertAllEqual([
+        1, input_size / output_stride, input_size / output_stride,
+        512 * endpoint_filter_scale
+    ], endpoints[str(int(np.math.log2(output_stride)))].shape.as_list())
+
+  @parameterized.parameters(
+      ('v0', None, 0.0),
+      ('v1', None, 0.0),
+      ('v1', 0.25, 0.0),
+      ('v1', 0.25, 0.2),
+  )
+  def test_network_features(self, stem_type, se_ratio,
+                            init_stochastic_depth_rate):
+    """Test additional features of ResNet models."""
+    input_size = 128
+    model_id = 50
+    endpoint_filter_scale = 4
+    output_stride = 8
+
+    tf.keras.backend.set_image_data_format('channels_last')
+
+    network = resnet_deeplab.DilatedResNet(
+        model_id=model_id,
+        output_stride=output_stride,
+        stem_type=stem_type,
+        se_ratio=se_ratio,
+        init_stochastic_depth_rate=init_stochastic_depth_rate)
     inputs = tf.keras.Input(shape=(input_size, input_size, 3), batch_size=1)
     endpoints = network(inputs)
     print(endpoints)
@@ -84,6 +114,9 @@ class ResNetTest(parameterized.TestCase, tf.test.TestCase):
     kwargs = dict(
         model_id=50,
         output_stride=8,
+        stem_type='v0',
+        se_ratio=0.25,
+        init_stochastic_depth_rate=0.2,
         use_sync_bn=False,
         activation='relu',
         norm_momentum=0.99,

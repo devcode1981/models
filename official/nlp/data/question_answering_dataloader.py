@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Loads dataset for the question answering (e.g, SQuAD) task."""
 from typing import Mapping, Optional
 
@@ -27,6 +26,8 @@ from official.nlp.data import data_loader_factory
 @dataclasses.dataclass
 class QADataConfig(cfg.DataConfig):
   """Data config for question answering task (tasks/question_answering)."""
+  # For training, `input_path` is expected to be a pre-processed TFRecord file,
+  # while for evaluation, it is expected to be a raw JSON file (b/173814590).
   input_path: str = ''
   global_batch_size: int = 48
   is_training: bool = True

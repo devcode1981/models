@@ -101,7 +101,7 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
 
     Args:
       field: a string key, options are
-        fields.BoxListFields.{boxes,classes,masks,keypoints,
+        fields.BoxListFields.{boxes,classes,masks,mask_weights,keypoints,
         keypoint_visibilities, densepose_*, track_ids,
         temporal_offsets, track_match_flags}
         fields.InputDataFields.is_annotated.
@@ -123,7 +123,7 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
 
     Args:
       field: a string key, options are
-        fields.BoxListFields.{boxes,classes,masks,keypoints,
+        fields.BoxListFields.{boxes,classes,masks,mask_weights,keypoints,
         keypoint_visibilities, densepose_*, track_ids} or
         fields.InputDataFields.is_annotated.
 
@@ -299,6 +299,7 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
       groundtruth_boxes_list,
       groundtruth_classes_list,
       groundtruth_masks_list=None,
+      groundtruth_mask_weights_list=None,
       groundtruth_keypoints_list=None,
       groundtruth_keypoint_visibilities_list=None,
       groundtruth_dp_num_points_list=None,
@@ -315,7 +316,9 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
       is_annotated_list=None,
       groundtruth_labeled_classes=None,
       groundtruth_verified_neg_classes=None,
-      groundtruth_not_exhaustive_classes=None):
+      groundtruth_not_exhaustive_classes=None,
+      groundtruth_keypoint_depths_list=None,
+      groundtruth_keypoint_depth_weights_list=None):
     """Provide groundtruth tensors.
 
     Args:
@@ -332,6 +335,8 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
         masks with values in {0, 1}.  If None, no masks are provided.
         Mask resolution `height_in`x`width_in` must agree with the resolution
         of the input image tensor provided to the `preprocess` function.
+      groundtruth_mask_weights_list: a list of 1-D tf.float32 tensors of shape
+        [num_boxes] with weights for each instance mask.
       groundtruth_keypoints_list: a list of 3-D tf.float32 tensors of
         shape [num_boxes, num_keypoints, 2] containing keypoints.
         Keypoints are assumed to be provided in normalized coordinates and
@@ -379,6 +384,11 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
       groundtruth_not_exhaustive_classes: A list of 1-D tf.float32 tensors of
         shape [num_classes], containing a K-hot representation of classes
         which don't have all of their instances marked exhaustively.
+      groundtruth_keypoint_depths_list: a list of 2-D tf.float32 tensors
+        of shape [num_boxes, num_keypoints] containing keypoint relative depths.
+      groundtruth_keypoint_depth_weights_list: a list of 2-D tf.float32 tensors
+        of shape [num_boxes, num_keypoints] containing the weights of the
+        relative depths.
     """
     self._groundtruth_lists[fields.BoxListFields.boxes] = groundtruth_boxes_list
     self._groundtruth_lists[
@@ -392,6 +402,9 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
     if groundtruth_masks_list:
       self._groundtruth_lists[
           fields.BoxListFields.masks] = groundtruth_masks_list
+    if groundtruth_mask_weights_list:
+      self._groundtruth_lists[
+          fields.BoxListFields.mask_weights] = groundtruth_mask_weights_list
     if groundtruth_keypoints_list:
       self._groundtruth_lists[
           fields.BoxListFields.keypoints] = groundtruth_keypoints_list
@@ -399,6 +412,14 @@ class DetectionModel(six.with_metaclass(abc.ABCMeta, _BaseClass)):
       self._groundtruth_lists[
           fields.BoxListFields.keypoint_visibilities] = (
               groundtruth_keypoint_visibilities_list)
+    if groundtruth_keypoint_depths_list:
+      self._groundtruth_lists[
+          fields.BoxListFields.keypoint_depths] = (
+              groundtruth_keypoint_depths_list)
+    if groundtruth_keypoint_depth_weights_list:
+      self._groundtruth_lists[
+          fields.BoxListFields.keypoint_depth_weights] = (
+              groundtruth_keypoint_depth_weights_list)
     if groundtruth_dp_num_points_list:
       self._groundtruth_lists[
           fields.BoxListFields.densepose_num_points] = (

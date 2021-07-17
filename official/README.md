@@ -19,7 +19,7 @@ In the near future, we will add:
 
 * State-of-the-art language understanding models.
 * State-of-the-art image classification models.
-* State-of-the-art objection detection and instance segmentation models.
+* State-of-the-art object detection and instance segmentation models.
 
 ## Table of Contents
 
@@ -40,17 +40,18 @@ In the near future, we will add:
 | Model | Reference (Paper) |
 |-------|-------------------|
 | [MNIST](vision/image_classification) | A basic model to classify digits from the [MNIST dataset](http://yann.lecun.com/exdb/mnist/) |
-| [ResNet](vision/image_classification) | [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385) |
+| [ResNet](vision/beta/MODEL_GARDEN.md) | [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385) |
+| [ResNet-RS](vision/beta/MODEL_GARDEN.md) | [Revisiting ResNets: Improved Training and Scaling Strategies](https://arxiv.org/abs/2103.07579) |
 | [EfficientNet](vision/image_classification) | [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://arxiv.org/abs/1905.11946) |
 
 #### Object Detection and Segmentation
 
 | Model | Reference (Paper) |
 |-------|-------------------|
-| [RetinaNet](vision/detection) | [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) |
-| [Mask R-CNN](vision/detection) | [Mask R-CNN](https://arxiv.org/abs/1703.06870) |
+| [RetinaNet](vision/beta/MODEL_GARDEN.md) | [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) |
+| [Mask R-CNN](vision/beta/MODEL_GARDEN.md) | [Mask R-CNN](https://arxiv.org/abs/1703.06870) |
 | [ShapeMask](vision/detection) | [ShapeMask: Learning to Segment Novel Objects by Refining Shape Priors](https://arxiv.org/abs/1904.03239) |
-| [SpineNet](vision/detection) | [SpineNet: Learning Scale-Permuted Backbone for Recognition and Localization](https://arxiv.org/abs/1912.05027) |
+| [SpineNet](vision/beta/MODEL_GARDEN.md) | [SpineNet: Learning Scale-Permuted Backbone for Recognition and Localization](https://arxiv.org/abs/1912.05027) |
 
 ### Natural Language Processing
 
@@ -61,12 +62,15 @@ In the near future, we will add:
 | [NHNet (News Headline generation model)](nlp/nhnet) | [Generating Representative Headlines for News Stories](https://arxiv.org/abs/2001.09386) |
 | [Transformer](nlp/transformer) | [Attention Is All You Need](https://arxiv.org/abs/1706.03762) |
 | [XLNet](nlp/xlnet) | [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) |
+| [MobileBERT](nlp/projects/mobilebert) | [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) |
 
 ### Recommendation
 
-| Model | Reference (Paper) |
-|-------|-------------------|
-| [NCF](recommendation) | [Neural Collaborative Filtering](https://arxiv.org/abs/1708.05031) |
+Model                            | Reference (Paper)
+-------------------------------- | -----------------
+[DLRM](recommendation/ranking)   | [Deep Learning Recommendation Model for Personalization and Recommendation Systems](https://arxiv.org/abs/1906.00091)
+[DCN v2](recommendation/ranking) | [Improved Deep & Cross Network and Practical Lessons for Web-scale Learning to Rank Systems](https://arxiv.org/abs/2008.13535)
+[NCF](recommendation)            | [Neural Collaborative Filtering](https://arxiv.org/abs/1708.05031)
 
 ## How to get started with the official models
 
@@ -103,6 +107,12 @@ pip will install all models and dependencies automatically.
 
 ```shell
 pip install tf-models-official
+```
+
+If you are using nlp packages, please also install **tensorflow-text**:
+
+```shell
+pip install tensorflow-text
 ```
 
 Please check out our [example](colab/fine_tuning_bert.ipynb)
@@ -143,20 +153,13 @@ os.environ['PYTHONPATH'] += ":/path/to/models"
 pip3 install --user -r official/requirements.txt
 ```
 
+Finally, if you are using nlp packages, please also install
+**tensorflow-text-nightly**:
+
+```shell
+pip3 install tensorflow-text-nightly
+```
+
 ## Contributions
 
 If you want to contribute, please review the [contribution guidelines](https://github.com/tensorflow/models/wiki/How-to-contribute).
-
-## Citing TF Official Model Garden
-
-To cite this repository:
-
-```
-@software{tfmodels2020github,
-  author = {Chen Chen and Xianzhi Du and Le Hou and Jaeyoun Kim and Pengchong
-  Jin and Jing Li and Yeqing Li and Abdullah Rashwan and Hongkun Yu},
-  title = {TensorFlow Official Model Garden},
-  url = {https://github.com/tensorflow/models/tree/master/official},
-  year = {2020},
-}
-```

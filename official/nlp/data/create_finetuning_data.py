@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """BERT finetuning task dataset generator."""
 
 import functools
@@ -49,7 +49,8 @@ flags.DEFINE_string(
 flags.DEFINE_enum(
     "classification_task_name", "MNLI", [
         "AX", "COLA", "IMDB", "MNLI", "MRPC", "PAWS-X", "QNLI", "QQP", "RTE",
-        "SST-2", "STS-B", "WNLI", "XNLI", "XTREME-XNLI", "XTREME-PAWS-X"
+        "SST-2", "STS-B", "WNLI", "XNLI", "XTREME-XNLI", "XTREME-PAWS-X",
+        "AX-g", "SUPERGLUE-RTE", "CB", "BoolQ", "WIC"
     ], "The name of the task to train BERT classifier. The "
     "difference between XTREME-XNLI and XNLI is: 1. the format "
     "of input tsv files; 2. the dev set for XTREME is english "
@@ -172,8 +173,26 @@ flags.DEFINE_string(
 
 def generate_classifier_dataset():
   """Generates classifier dataset and returns input meta data."""
-  assert (FLAGS.input_data_dir and FLAGS.classification_task_name or
-          FLAGS.tfds_params)
+  if FLAGS.classification_task_name in [
+      "COLA",
+      "WNLI",
+      "SST-2",
+      "MRPC",
+      "QQP",
+      "STS-B",
+      "MNLI",
+      "QNLI",
+      "RTE",
+      "AX",
+      "SUPERGLUE-RTE",
+      "CB",
+      "BoolQ",
+      "WIC",
+  ]:
+    assert not FLAGS.input_data_dir or FLAGS.tfds_params
+  else:
+    assert (FLAGS.input_data_dir and FLAGS.classification_task_name or
+            FLAGS.tfds_params)
 
   if FLAGS.tokenization == "WordPiece":
     tokenizer = tokenization.FullTokenizer(
@@ -238,7 +257,17 @@ def generate_classifier_dataset():
             functools.partial(
                 classifier_data_lib.XtremePawsxProcessor,
                 translated_data_dir=FLAGS.translated_input_data_dir,
-                only_use_en_dev=FLAGS.only_use_en_dev)
+                only_use_en_dev=FLAGS.only_use_en_dev),
+        "ax-g":
+            classifier_data_lib.AXgProcessor,
+        "superglue-rte":
+            classifier_data_lib.SuperGLUERTEProcessor,
+        "cb":
+            classifier_data_lib.CBProcessor,
+        "boolq":
+            classifier_data_lib.BoolQProcessor,
+        "wic":
+            classifier_data_lib.WnliProcessor,
     }
     task_name = FLAGS.classification_task_name.lower()
     if task_name not in processors:

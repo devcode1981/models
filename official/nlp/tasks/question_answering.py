@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Question answering task."""
 import functools
 import json
@@ -76,6 +75,9 @@ class QuestionAnsweringTask(base_task.Task):
 
   def __init__(self, params: cfg.TaskConfig, logging_dir=None, name=None):
     super().__init__(params, logging_dir, name=name)
+
+    if params.validation_data is None:
+      return
 
     if params.validation_data.tokenization == 'WordPiece':
       self.squad_lib = squad_lib_wp
@@ -212,7 +214,10 @@ class QuestionAnsweringTask(base_task.Task):
         input_context)
 
   def build_metrics(self, training=None):
-    del training
+    if not training:
+      # We cannot compute start/end_position_accuracy because start/end_position
+      # labels are not available in the validation dataset (b/173794928).
+      return []
     # TODO(lehou): a list of metrics doesn't work the same as in compile/fit.
     metrics = [
         tf.keras.metrics.SparseCategoricalAccuracy(
@@ -244,8 +249,9 @@ class QuestionAnsweringTask(base_task.Task):
     unique_ids = features.pop('unique_ids')
     model_outputs = self.inference_step(features, model)
     start_logits, end_logits = model_outputs
+    # We cannot compute validation_loss here, because start/end_position
+    # labels are not available in the validation dataset (b/173794928).
     logs = {
-        self.loss: 0.0,  # TODO(lehou): compute the real validation loss.
         'unique_ids': unique_ids,
         'start_logits': start_logits,
         'end_logits': end_logits,
@@ -270,7 +276,7 @@ class QuestionAnsweringTask(base_task.Task):
             end_logits=values[2]))
     return state
 
-  def reduce_aggregated_logs(self, aggregated_logs):
+  def reduce_aggregated_logs(self, aggregated_logs, global_step=None):
     all_predictions, _, scores_diff = (
         self.squad_lib.postprocess_output(
             self._eval_examples,
@@ -293,8 +299,6 @@ class QuestionAnsweringTask(base_task.Task):
     if self.task_config.validation_data.version_2_with_negative:
       eval_metrics = squad_evaluate_v2_0.evaluate(pred_dataset, all_predictions,
                                                   scores_diff)
-      # Filter out useless metrics, such as start_position_accuracy that
-      # we did not actually compute.
       eval_metrics = {
           'exact_match': eval_metrics['final_exact'],
           'exact_match_threshold': eval_metrics['final_exact_thresh'],
@@ -305,8 +309,6 @@ class QuestionAnsweringTask(base_task.Task):
       }
     else:
       eval_metrics = squad_evaluate_v1_1.evaluate(pred_dataset, all_predictions)
-      # Filter out useless metrics, such as start_position_accuracy that
-      # we did not actually compute.
       eval_metrics = {
           'exact_match': eval_metrics['exact_match'],
           'final_f1': eval_metrics['final_f1']
@@ -417,7 +419,6 @@ class XLNetQuestionAnsweringTask(QuestionAnsweringTask):
     class_logits = model_outputs['class_logits']
 
     logs = {
-        self.loss: 0.0,  # TODO(lehou): compute the real validation loss.
         'unique_ids': unique_ids,
         'start_top_predictions': start_top_predictions,
         'end_top_predictions': end_top_predictions,
